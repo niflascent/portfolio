@@ -1,45 +1,88 @@
-﻿Write-Host "=== Verifying Installed Components ===" -ForegroundColor Cyan
+# Path to log file
+$logPath = "C:\install-tools\logging\verify-install.log"
+if (!(Test-Path (Split-Path $logPath))) {
+    New-Item -Path (Split-Path $logPath) -ItemType Directory -Force
+}
 
-# Helper function for status
-function Show-Result {
-    param ($Name, $Result)
-    if ($Result) {
-        Write-Host "[OK] $Name installed: $Result" -ForegroundColor Green
-    } else {
-        Write-Host "[MISSING] $Name not found." -ForegroundColor Red
+function Log($message) {
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    "$timestamp - $message" | Out-File -FilePath $logPath -Append -Encoding UTF8
+    Write-Output $message
+}
+
+Log "=== Starting software verification ==="
+
+# Check Git
+try {
+    $gitVersion = git --version
+    Log "Git installed: $gitVersion"
+} catch {
+    Log "Git NOT installed or not in PATH."
+}
+
+# Check GitHub CLI (gh)
+try {
+    $ghVersion = gh --version
+    Log "GitHub CLI installed: $ghVersion"
+} catch {
+    Log "GitHub CLI NOT installed or not in PATH."
+}
+
+# Check Azure CLI
+try {
+    $azVersion = az --version
+    Log "Azure CLI installed: $($azVersion.Split("`n")[0])"
+} catch {
+    Log "Azure CLI NOT installed or not in PATH."
+}
+
+# Check Bicep CLI
+try {
+    $bicepVersion = az bicep version
+    Log "Bicep CLI installed: $bicepVersion"
+} catch {
+    Log "Bicep CLI NOT installed or not accessible via Azure CLI."
+}
+
+# Check Terraform
+try {
+    $terraformVersion = terraform -version
+    Log "Terraform installed: $($terraformVersion.Split("`n")[0])"
+} catch {
+    Log "Terraform NOT installed or not in PATH."
+}
+
+# Check VS Code
+$vsCodePaths = @(
+    "${env:ProgramFiles}\Microsoft VS Code\Code.exe",
+    "${env:LocalAppData}\Programs\Microsoft VS Code\Code.exe"
+)
+
+$vsCodeExists = $false
+foreach ($path in $vsCodePaths) {
+    if (Test-Path $path) {
+        $vsCodeExists = $true
+        break
     }
 }
-
-# 1. Visual Studio Code
-try {
-    $codeVer = (code --version 2>$null) -join " "
-    Show-Result "Visual Studio Code" $codeVer
-} catch { Show-Result "Visual Studio Code" $null }
-
-# 2. Terraform
-try {
-    $tfVer = (terraform --version 2>$null | Select-String "Terraform v").ToString()
-    Show-Result "Terraform" $tfVer
-} catch { Show-Result "Terraform" $null }
-
-# 3. AzViz
-$azviz = Get-Module -ListAvailable AzViz | Select-Object -First 1
-Show-Result "AzViz" $($azviz.Version)
-
-# 4. PowerShell Az Module
-$azModule = Get-Module -ListAvailable Az.Accounts | Select-Object -First 1
-Show-Result "PowerShell Az Module" $($azModule.Version)
-
-# 5. NuGet Provider
-$nuget = Get-PackageProvider -Name NuGet -ListAvailable 2>$null
-Show-Result "NuGet Provider" $($nuget.Version)
-
-# 6. Install Script Log
-$logPath = "C:\install-tools\logging\install-tools.log"
-if (Test-Path $logPath) {
-    Write-Host "[OK] Install script log found at $logPath" -ForegroundColor Green
-    Write-Host "---- Last 10 log lines ----"
-    Get-Content $logPath | Select-Object -Last 10
+if ($vsCodeExists) {
+    Log "Visual Studio Code installed."
 } else {
-    Write-Host "[MISSING] Install script log not found at $logPath" -ForegroundColor Red
+    Log "Visual Studio Code NOT installed."
 }
+
+# Check PowerShell Az Module
+try {
+    Import-Module Az -ErrorAction Stop
+    $azModules = Get-Module -Name Az* -ListAvailable
+    if ($azModules) {
+        $moduleList = $azModules | Select-Object -ExpandProperty Name -Unique | Sort-Object
+        Log "Az PowerShell modules installed: $($moduleList -join ', ')"
+    } else {
+        Log "Az PowerShell modules NOT found."
+    }
+} catch {
+    Log "Failed to load Az PowerShell modules."
+}
+
+Log "=== Software verification completed ==="
