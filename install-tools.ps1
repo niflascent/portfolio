@@ -3,123 +3,115 @@
 # Idempotent Installer
 # Run as Administrator
 
-# Create logging folder and start transcript
-$logFolder = "C:\install-tools\logging"
-if (-not (Test-Path $logFolder)) {
-    New-Item -ItemType Directory -Path $logFolder -Force | Out-Null
+$ErrorActionPreference = "Stop"
+
+# Ensure logging folder exists
+$logDir = "C:\install-tools\logging"
+if (-not (Test-Path $logDir)) {
+    New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 }
-$logFile = Join-Path $logFolder "install-tools.log"
-Start-Transcript -Path $logFile -Append
+Start-Transcript -Path "$logDir\install-tools.log" -Append
 
-Write-Output "**********************"
-Write-Output "Starting install-tools.ps1"
+Write-Output "=== Starting tool installation ==="
 
-# Ensure NuGet provider installed silently without prompts
+# Force TLS 1.2 for secure downloads
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+# Ensure NuGet provider is installed silently
+Write-Output "Ensuring NuGet provider - start"
 if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
-    Write-Output "Installing NuGet provider silently..."
-    Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Confirm:$false -Scope CurrentUser -ErrorAction Stop
+    Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope AllUsers
 }
+Write-Output "Ensuring NuGet provider - complete"
 
-# Import PackageManagement module explicitly
-Import-Module PackageManagement
-
-# Function to install a module if missing
-function Install-ModuleIfMissing {
-    param(
-        [string]$ModuleName
-    )
-    if (-not (Get-Module -ListAvailable -Name $ModuleName)) {
-        Write-Output "Installing PowerShell module $ModuleName..."
-        Install-Module -Name $ModuleName -Scope CurrentUser -Force -AllowClobber
-    } else {
-        Write-Output "PowerShell module $ModuleName already installed"
-    }
-}
-
-# Install Chocolatey if not installed
-if (-not (Get-Command choco.exe -ErrorAction SilentlyContinue)) {
-    Write-Output "Installing Chocolatey package manager..."
-    Set-ExecutionPolicy Bypass -Scope Process -Force
-    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-    iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+# Install Git if not installed
+if (-not (Get-Command "git.exe" -ErrorAction SilentlyContinue)) {
+    Write-Output "Installing Git..."
+    winget install --id Git.Git -e --silent
 } else {
-    Write-Output "Chocolatey already installed"
+    Write-Output "Git already installed"
 }
 
-# Install software with Chocolatey if missing
-$chocoPackages = @("vscode", "git", "terraform")
-
-foreach ($pkg in $chocoPackages) {
-    if (-not (Get-Command $pkg -ErrorAction SilentlyContinue)) {
-        Write-Output "Installing $pkg via Chocolatey..."
-        choco install $pkg -y --no-progress
-    } else {
-        Write-Output "$pkg already installed"
+# Install GitHub CLI (gh) using Winget
+if (-not (Get-Command "gh" -ErrorAction SilentlyContinue)) {
+    try {
+        Write-Output "Installing GitHub CLI via Winget..."
+        winget install --id GitHub.cli --silent --accept-package-agreements --accept-source-agreements | Out-Null
+        Write-Output "GitHub CLI installed."
     }
+    catch {
+        Write-Output "Failed to install GitHub CLI via Winget: $($_.Exception.Message)"
+    }
+} else {
+    Write-Output "GitHub CLI already installed."
+}
+
+# Install Azure CLI
+if (-not (Get-Command "az" -ErrorAction SilentlyContinue)) {
+    Write-Output "Installing Azure CLI..."
+    Invoke-WebRequest -Uri https://aka.ms/installazurecliwindows -OutFile "$env:TEMP\AzureCLI.msi" -UseBasicParsing
+    Start-Process msiexec.exe -ArgumentList "/i `"$env:TEMP\AzureCLI.msi`" /quiet /norestart" -Wait
+    Remove-Item "$env:TEMP\AzureCLI.msi" -Force
+    Write-Output "Azure CLI installed."
+} else {
+    Write-Output "Azure CLI already installed."
+}
+
+# Install Bicep CLI
+if (-not (Get-Command "bicep" -ErrorAction SilentlyContinue)) {
+    Write-Output "Installing Bicep CLI..."
+    $bicepDir = "C:\Program Files\BicepCLI"
+    if (-not (Test-Path $bicepDir)) { New-Item -ItemType Directory -Path $bicepDir | Out-Null }
+    Invoke-WebRequest -Uri "https://github.com/Azure/bicep/releases/latest/download/bicep-win-x64.exe" -OutFile "$bicepDir\bicep.exe" -UseBasicParsing
+    $env:PATH += ";$bicepDir"
+    [Environment]::SetEnvironmentVariable("Path", $env:Path + ";$bicepDir", [EnvironmentVariableTarget]::Machine)
+    Write-Output "Bicep CLI installed."
+} else {
+    Write-Output "Bicep CLI already installed."
+}
+
+# Install Terraform
+if (-not (Get-Command "terraform" -ErrorAction SilentlyContinue)) {
+    Write-Output "Installing Terraform..."
+    $terraformZip = "$env:TEMP\terraform.zip"
+    Invoke-WebRequest -Uri "https://releases.hashicorp.com/terraform/1.12.2/terraform_1.12.2_windows_amd64.zip" -OutFile $terraformZip -UseBasicParsing
+    Expand-Archive $terraformZip -DestinationPath "C:\Terraform" -Force
+    Remove-Item $terraformZip -Force
+    $env:PATH += ";C:\Terraform"
+    [Environment]::SetEnvironmentVariable("Path", $env:Path + ";C:\Terraform", [EnvironmentVariableTarget]::Machine)
+    Write-Output "Terraform installed."
+} else {
+    Write-Output "Terraform already installed."
+}
+
+# Install Visual Studio Code
+if (-not (Get-Command "code" -ErrorAction SilentlyContinue)) {
+    Write-Output "Installing Visual Studio Code..."
+    winget install --id Microsoft.VisualStudioCode -e --silent
+} else {
+    Write-Output "Visual Studio Code already installed."
 }
 
 # Install PowerShell modules
-Install-ModuleIfMissing -ModuleName "Az"
-Install-ModuleIfMissing -ModuleName "AzViz"
-Install-ModuleIfMissing -ModuleName "AzureAD"
-Install-ModuleIfMissing -ModuleName "Microsoft.Graph"
+Write-Output "Installing Az module..."
+Install-Module -Name Az -AllowClobber -Force -Scope AllUsers
+Write-Output "Installing AzViz module..."
+Install-Module -Name AzViz -Force -Scope AllUsers
+Write-Output "Installing AzureAD module..."
+Install-Module -Name AzureAD -Force -Scope AllUsers
+Write-Output "Installing Microsoft.Graph module..."
+Install-Module -Name Microsoft.Graph -Force -Scope AllUsers
 
-# Install Bicep CLI from GitHub if not present
-if (-not (Get-Command bicep -ErrorAction SilentlyContinue)) {
-    Write-Output "Installing Bicep CLI from GitHub release..."
-
-    $bicepUri = "https://github.com/Azure/bicep/releases/latest/download/bicep-win-x64.exe"
-    $bicepPath = "C:\Program Files\Bicep\bicep.exe"
-
-    # Ensure destination folder exists
-    $bicepDir = Split-Path $bicepPath
-    if (-not (Test-Path $bicepDir)) {
-        New-Item -ItemType Directory -Path $bicepDir -Force | Out-Null
-    }
-
-    Invoke-WebRequest -Uri $bicepUri -OutFile $bicepPath
-
-    # Add to PATH for current session
-    $env:Path += ";$bicepDir"
-
-    Write-Output "Bicep CLI installed at $bicepPath"
-} else {
-    Write-Output "Bicep CLI already installed"
-}
-
-Write-Output "All installations complete. Collecting version information..."
-
-# --- Version Reporting Section ---
+# Display installed versions
 Write-Output "===== Version Information ====="
-
-# PowerShell Modules
-Get-InstalledModule Az, AzViz, AzureAD, Microsoft.Graph -ErrorAction SilentlyContinue | 
-    ForEach-Object { Write-Output "$($_.Name): v$($_.Version)" }
-
-# Bicep CLI
-if (Get-Command bicep -ErrorAction SilentlyContinue) {
-    $bicepVersion = bicep --version
-    Write-Output "Bicep CLI: v$bicepVersion"
-}
-
-# Git
-if (Get-Command git -ErrorAction SilentlyContinue) {
-    $gitVersion = git --version
-    Write-Output "Git: $gitVersion"
-}
-
-# Terraform
-if (Get-Command terraform -ErrorAction SilentlyContinue) {
-    $tfVersion = terraform --version | Select-Object -First 1
-    Write-Output "Terraform: $tfVersion"
-}
-
-# VS Code
-if (Get-Command code -ErrorAction SilentlyContinue) {
-    $codeVersion = code --version | Select-Object -First 1
-    Write-Output "VS Code: v$codeVersion"
-}
-
+if (Get-Module -ListAvailable -Name Az) { Write-Output "Az: v$((Get-InstalledModule Az).Version)" }
+if (Get-Module -ListAvailable -Name AzViz) { Write-Output "AzViz: v$((Get-InstalledModule AzViz).Version)" }
+if (Get-Module -ListAvailable -Name AzureAD) { Write-Output "AzureAD: v$((Get-InstalledModule AzureAD).Version)" }
+if (Get-Module -ListAvailable -Name Microsoft.Graph) { Write-Output "Microsoft.Graph: v$((Get-InstalledModule Microsoft.Graph).Version)" }
+if (Get-Command "bicep" -ErrorAction SilentlyContinue) { Write-Output "Bicep CLI: $(bicep --version)" }
+if (Get-Command "terraform" -ErrorAction SilentlyContinue) { Write-Output "Terraform: $(terraform -version | Select-Object -First 1)" }
+if (Get-Command "az" -ErrorAction SilentlyContinue) { Write-Output "Azure CLI: $(az version | ConvertTo-Json -Compress)" }
+if (Get-Command "gh" -ErrorAction SilentlyContinue) { Write-Output "GitHub CLI: $(gh --version)" }
 Write-Output "===== End of Version Information ====="
 
 Stop-Transcript
