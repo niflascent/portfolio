@@ -1,118 +1,79 @@
 # install-tools.ps1
-# Version 2.2 20250806
+# Version 2.4 20250806
 # Idempotent Installer
 # Run as Administrator
 
-# install-tools.ps1
-# Enhanced version with improved NuGet provider install for SYSTEM context
+# Create logging folder and start transcript
+$logFolder = "C:\install-tools\logging"
+if (-not (Test-Path $logFolder)) {
+    New-Item -ItemType Directory -Path $logFolder -Force | Out-Null
+}
+$logFile = Join-Path $logFolder "install-tools.log"
+Start-Transcript -Path $logFile -Append
 
-$LogDir = "C:\install-tools\logging"
-$LogFile = Join-Path $LogDir "install-tools.log"
+Write-Output "**********************"
+Write-Output "Starting install-tools.ps1"
 
-if (!(Test-Path $LogDir)) {
-    New-Item -Path $LogDir -ItemType Directory -Force
+# Ensure NuGet provider installed silently without prompts
+if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
+    Write-Output "Installing NuGet provider silently..."
+    Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Confirm:$false -Scope CurrentUser -ErrorAction Stop
 }
 
-function Log($msg) {
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    "$timestamp - $msg" | Out-File -FilePath $LogFile -Append -Encoding UTF8
-    Write-Output $msg
-}
+# Import PackageManagement module explicitly
+Import-Module PackageManagement
 
-Log "********** Starting install-tools.ps1 **********"
-
-# Ensure TLS 1.2
-try {
-    Log "Setting TLS to 1.2"
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-} catch {
-    Log "Failed setting TLS 1.2: $_"
-}
-
-# Ensure NuGet provider installed for AllUsers, no prompt, no hang
-try {
-    Log "Ensuring NuGet provider - start"
-    $nugetProvider = Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue
-    if (-not $nugetProvider) {
-        Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope AllUsers -Confirm:$false -ErrorAction Stop
+# Function to install a module if missing
+function Install-ModuleIfMissing {
+    param(
+        [string]$ModuleName
+    )
+    if (-not (Get-Module -ListAvailable -Name $ModuleName)) {
+        Write-Output "Installing PowerShell module $ModuleName..."
+        Install-Module -Name $ModuleName -Scope CurrentUser -Force -AllowClobber
+    } else {
+        Write-Output "PowerShell module $ModuleName already installed"
     }
-    Import-PackageProvider -Name NuGet -Force -ErrorAction Stop
-    Log "Ensured NuGet provider successfully"
-} catch {
-    Log "Error ensuring NuGet provider: $_"
-    throw
 }
 
-# Ensure PowerShellGet module is updated
-try {
-    Log "Updating PowerShellGet module"
-    Install-Module -Name PowerShellGet -Force -AllowClobber -Scope AllUsers -Confirm:$false -ErrorAction Stop
-    Log "PowerShellGet module updated successfully"
-} catch {
-    Log "Failed to update PowerShellGet module: $_"
+# Install Chocolatey if not installed
+if (-not (Get-Command choco.exe -ErrorAction SilentlyContinue)) {
+    Write-Output "Installing Chocolatey package manager..."
+    Set-ExecutionPolicy Bypass -Scope Process -Force
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+    iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+} else {
+    Write-Output "Chocolatey already installed"
 }
 
-# Install Az PowerShell module (latest)
-try {
-    Log "Installing Az module"
-    Install-Module -Name Az -Force -AllowClobber -Scope AllUsers -Confirm:$false -ErrorAction Stop
-    Log "Az module installed successfully"
-} catch {
-    Log "Failed to install Az module: $_"
+# Install software with Chocolatey if missing
+$chocoPackages = @("vscode", "git", "terraform")
+
+foreach ($pkg in $chocoPackages) {
+    if (-not (Get-Command $pkg -ErrorAction SilentlyContinue)) {
+        Write-Output "Installing $pkg via Chocolatey..."
+        choco install $pkg -y --no-progress
+    } else {
+        Write-Output "$pkg already installed"
+    }
 }
 
-# Install Git
-try {
-    Log "Installing Git"
-    choco install git -y --no-progress | Out-Null
-    Log "Git installed successfully"
-} catch {
-    Log "Failed to install Git: $_"
+# Install PowerShell modules
+Install-ModuleIfMissing -ModuleName "Az"
+Install-ModuleIfMissing -ModuleName "AzViz"
+Install-ModuleIfMissing -ModuleName "AzureAD"
+Install-ModuleIfMissing -ModuleName "Microsoft.Graph"
+
+# Install Bicep CLI if not present
+if (-not (Get-Command bicep -ErrorAction SilentlyContinue)) {
+    Write-Output "Installing Bicep CLI..."
+    Invoke-Expression "& { $(Invoke-RestMethod -Uri https://aka.ms/install-bicep.ps1) }"
+} else {
+    Write-Output "Bicep CLI already installed"
 }
 
-# Install GitHub CLI
-try {
-    Log "Installing GitHub CLI"
-    choco install github-cli -y --no-progress | Out-Null
-    Log "GitHub CLI installed successfully"
-} catch {
-    Log "Failed to install GitHub CLI: $_"
-}
+Write-Output "All installations complete."
 
-# Install Azure CLI
-try {
-    Log "Installing Azure CLI"
-    choco install azure-cli -y --no-progress | Out-Null
-    Log "Azure CLI installed successfully"
-} catch {
-    Log "Failed to install Azure CLI: $_"
-}
+Stop-Transcript
 
-# Install Bicep CLI via Azure CLI
-try {
-    Log "Installing Bicep CLI"
-    az bicep install --yes | Out-Null
-    Log "Bicep CLI installed successfully"
-} catch {
-    Log "Failed to install Bicep CLI: $_"
-}
 
-# Install Terraform
-try {
-    Log "Installing Terraform"
-    choco install terraform -y --no-progress | Out-Null
-    Log "Terraform installed successfully"
-} catch {
-    Log "Failed to install Terraform: $_"
-}
-
-# Install Visual Studio Code
-try {
-    Log "Installing Visual Studio Code"
-    choco install vscode -y --no-progress | Out-Null
-    Log "Visual Studio Code installed successfully"
-} catch {
-    Log "Failed to install Visual Studio Code: $_"
-}
-
-Log "********** install-tools.ps1 completed **********"
