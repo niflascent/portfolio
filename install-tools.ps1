@@ -72,8 +72,39 @@ if (-not (Get-Command bicep -ErrorAction SilentlyContinue)) {
     Write-Output "Bicep CLI already installed"
 }
 
-Write-Output "All installations complete."
+Write-Output "All installations complete. Collecting version information..."
+
+# --- Version Reporting Section ---
+Write-Output "===== Version Information ====="
+
+# PowerShell Modules
+Get-InstalledModule Az, AzViz, AzureAD, Microsoft.Graph -ErrorAction SilentlyContinue | 
+    ForEach-Object { Write-Output "$($_.Name): v$($_.Version)" }
+
+# Bicep CLI
+if (Get-Command bicep -ErrorAction SilentlyContinue) {
+    $bicepVersion = bicep --version
+    Write-Output "Bicep CLI: v$bicepVersion"
+}
+
+# Git
+if (Get-Command git -ErrorAction SilentlyContinue) {
+    $gitVersion = git --version
+    Write-Output "Git: $gitVersion"
+}
+
+# Terraform
+if (Get-Command terraform -ErrorAction SilentlyContinue) {
+    $tfVersion = terraform --version | Select-Object -First 1
+    Write-Output "Terraform: $tfVersion"
+}
+
+# VS Code
+if (Get-Command code -ErrorAction SilentlyContinue) {
+    $codeVersion = code --version | Select-Object -First 1
+    Write-Output "VS Code: v$codeVersion"
+}
+
+Write-Output "===== End of Version Information ====="
 
 Stop-Transcript
-
-
