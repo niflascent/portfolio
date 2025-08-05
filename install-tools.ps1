@@ -64,10 +64,25 @@ Install-ModuleIfMissing -ModuleName "AzViz"
 Install-ModuleIfMissing -ModuleName "AzureAD"
 Install-ModuleIfMissing -ModuleName "Microsoft.Graph"
 
-# Install Bicep CLI if not present
+# Install Bicep CLI from GitHub if not present
 if (-not (Get-Command bicep -ErrorAction SilentlyContinue)) {
-    Write-Output "Installing Bicep CLI..."
-    Invoke-Expression "& { $(Invoke-RestMethod -Uri https://aka.ms/install-bicep.ps1) }"
+    Write-Output "Installing Bicep CLI from GitHub release..."
+
+    $bicepUri = "https://github.com/Azure/bicep/releases/latest/download/bicep-win-x64.exe"
+    $bicepPath = "C:\Program Files\Bicep\bicep.exe"
+
+    # Ensure destination folder exists
+    $bicepDir = Split-Path $bicepPath
+    if (-not (Test-Path $bicepDir)) {
+        New-Item -ItemType Directory -Path $bicepDir -Force | Out-Null
+    }
+
+    Invoke-WebRequest -Uri $bicepUri -OutFile $bicepPath
+
+    # Add to PATH for current session
+    $env:Path += ";$bicepDir"
+
+    Write-Output "Bicep CLI installed at $bicepPath"
 } else {
     Write-Output "Bicep CLI already installed"
 }
