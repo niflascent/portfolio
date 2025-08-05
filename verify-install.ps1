@@ -1,103 +1,66 @@
-# Path to log file
-$logPath = "C:\install-tools\logging\verify-install.log"
-if (!(Test-Path (Split-Path $logPath))) {
-    New-Item -Path (Split-Path $logPath) -ItemType Directory -Force
-}
+Write-Output "=== Starting software verification ==="
 
-function Log($message) {
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    "$timestamp - $message" | Out-File -FilePath $logPath -Append -Encoding UTF8
-    Write-Output $message
-}
-
-Log "=== Starting software verification ==="
-
-# Check Git
-try {
+# Git
+if (Get-Command git -ErrorAction SilentlyContinue) {
     $gitVersion = git --version
-    Log "Git installed: $gitVersion"
-} catch {
-    Log "Git NOT installed or not in PATH."
-}
-
-# Check GitHub CLI (gh)
-try {
-    $ghVersion = gh --version
-    Log "GitHub CLI installed: $ghVersion"
-} catch {
-    Log "GitHub CLI NOT installed or not in PATH."
-}
-
-# Check Azure CLI
-try {
-    $azVersion = az --version
-    Log "Azure CLI installed: $($azVersion.Split("`n")[0])"
-} catch {
-    Log "Azure CLI NOT installed or not in PATH."
-}
-
-# Check Bicep CLI
-try {
-    $bicepVersion = az bicep version
-    Log "Bicep CLI installed: $bicepVersion"
-} catch {
-    Log "Bicep CLI NOT installed or not accessible via Azure CLI."
-}
-
-# Check Terraform
-try {
-    $terraformVersion = terraform -version
-    Log "Terraform installed: $($terraformVersion.Split("`n")[0])"
-} catch {
-    Log "Terraform NOT installed or not in PATH."
-}
-
-# Check VS Code
-$vsCodePaths = @(
-    "${env:ProgramFiles}\Microsoft VS Code\Code.exe",
-    "${env:LocalAppData}\Programs\Microsoft VS Code\Code.exe"
-)
-
-$vsCodeExists = $false
-foreach ($path in $vsCodePaths) {
-    if (Test-Path $path) {
-        $vsCodeExists = $true
-        break
-    }
-}
-if ($vsCodeExists) {
-    Log "Visual Studio Code installed."
+    Write-Output "Git installed: $gitVersion"
 } else {
-    Log "Visual Studio Code NOT installed."
+    Write-Output "Git NOT installed or not in PATH."
 }
 
-# Check PowerShell Az Module
-try {
-    Import-Module Az -ErrorAction Stop
-    $azModules = Get-Module -Name Az* -ListAvailable
-    if ($azModules) {
-        $moduleList = $azModules | Select-Object -ExpandProperty Name -Unique | Sort-Object
-        Log "Az PowerShell modules installed: $($moduleList -join ', ')"
+# Terraform
+if (Get-Command terraform -ErrorAction SilentlyContinue) {
+    $tfVersion = terraform --version | Select-Object -First 1
+    Write-Output "Terraform installed: $tfVersion"
+} else {
+    Write-Output "Terraform NOT installed or not in PATH."
+}
+
+# Visual Studio Code
+if (Get-Command code -ErrorAction SilentlyContinue) {
+    $codeVersion = code --version | Select-Object -First 1
+    Write-Output "Visual Studio Code installed: $codeVersion"
+} else {
+    Write-Output "Visual Studio Code NOT installed or not in PATH."
+}
+
+# Bicep CLI
+if (Get-Command bicep -ErrorAction SilentlyContinue) {
+    $bicepVersion = bicep --version
+    Write-Output "Bicep CLI installed: v$bicepVersion"
+} else {
+    Write-Output "Bicep CLI NOT installed or not in PATH."
+}
+
+# Azure CLI
+if (Get-Command az -ErrorAction SilentlyContinue) {
+    $azVersion = az --version | Select-Object -First 1
+    Write-Output "Azure CLI installed: $azVersion"
+} else {
+    Write-Output "Azure CLI NOT installed or not in PATH."
+}
+
+# GitHub CLI
+if (Get-Command gh -ErrorAction SilentlyContinue) {
+    $ghVersion = gh --version | Select-Object -First 1
+    Write-Output "GitHub CLI installed: $ghVersion"
+} else {
+    Write-Output "GitHub CLI NOT installed or not in PATH."
+}
+
+# PowerShell modules
+$modules = @("Az", "AzViz", "AzureAD", "Microsoft.Graph")
+foreach ($mod in $modules) {
+    if (Get-Module -ListAvailable -Name $mod) {
+        $ver = (Get-InstalledModule -Name $mod -ErrorAction SilentlyContinue).Version
+        if ($ver) {
+            Write-Output "$mod module installed: v$ver"
+        } else {
+            Write-Output "$mod module installed"
+        }
     } else {
-        Log "Az PowerShell modules NOT found."
+        Write-Output "$mod module NOT installed."
     }
-} catch {
-    Log "Failed to load Az PowerShell modules."
 }
 
-# Check AzureAD module
-if (Get-Module -ListAvailable -Name AzureAD) {
-    Write-Output "AzureAD module is installed."
-} else {
-    Write-Output "AzureAD module is NOT installed."
-}
-
-# Check Microsoft.Graph module
-if (Get-Module -ListAvailable -Name Microsoft.Graph) {
-    Write-Output "Microsoft.Graph module is installed."
-} else {
-    Write-Output "Microsoft.Graph module is NOT installed."
-}
-
-Log "=== Software verification completed ==="
-
+Write-Output "=== Software verification completed ==="
