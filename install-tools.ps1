@@ -3,77 +3,116 @@
 # Idempotent Installer
 # Run as Administrator
 
-# Ensure logging directory exists
-$logDir = "C:\install-tools\logging"
-if (!(Test-Path $logDir)) {
-    New-Item -Path $logDir -ItemType Directory -Force
+# install-tools.ps1
+# Enhanced version with improved NuGet provider install for SYSTEM context
+
+$LogDir = "C:\install-tools\logging"
+$LogFile = Join-Path $LogDir "install-tools.log"
+
+if (!(Test-Path $LogDir)) {
+    New-Item -Path $LogDir -ItemType Directory -Force
 }
-$logFile = Join-Path $logDir "install-tools.log"
 
-Start-Transcript -Path $logFile -Append
+function Log($msg) {
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    "$timestamp - $msg" | Out-File -FilePath $LogFile -Append -Encoding UTF8
+    Write-Output $msg
+}
 
-Write-Output "Starting tool installation at $(Get-Date)"
+Log "********** Starting install-tools.ps1 **********"
 
 # Ensure TLS 1.2
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
-# Install NuGet provider silently
-Write-Output "Ensuring NuGet provider..."
-$nugetProvider = Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue
-if (-not $nugetProvider) {
-    Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope CurrentUser
-}
-
-# Install Az PowerShell modules
-Write-Output "Installing Az PowerShell modules..."
 try {
-    Install-Module -Name Az -AllowClobber -Force -Scope CurrentUser
+    Log "Setting TLS to 1.2"
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 } catch {
-    Write-Output "Az module install failed: $_"
+    Log "Failed setting TLS 1.2: $_"
 }
 
-# Install Chocolatey if missing
-if (-not (Get-Command choco.exe -ErrorAction SilentlyContinue)) {
-    Write-Output "Installing Chocolatey..."
-    Set-ExecutionPolicy Bypass -Scope Process -Force
-    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-    Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+# Ensure NuGet provider installed for AllUsers, no prompt, no hang
+try {
+    Log "Ensuring NuGet provider - start"
+    $nugetProvider = Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue
+    if (-not $nugetProvider) {
+        Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope AllUsers -Confirm:$false -ErrorAction Stop
+    }
+    Import-PackageProvider -Name NuGet -Force -ErrorAction Stop
+    Log "Ensured NuGet provider successfully"
+} catch {
+    Log "Error ensuring NuGet provider: $_"
+    throw
 }
 
-# Ensure Chocolatey is available in this session
-$env:Path += ";$($env:ALLUSERSPROFILE)\chocolatey\bin"
+# Ensure PowerShellGet module is updated
+try {
+    Log "Updating PowerShellGet module"
+    Install-Module -Name PowerShellGet -Force -AllowClobber -Scope AllUsers -Confirm:$false -ErrorAction Stop
+    Log "PowerShellGet module updated successfully"
+} catch {
+    Log "Failed to update PowerShellGet module: $_"
+}
 
-# Install Terraform
-Write-Output "Installing Terraform..."
-choco install terraform -y --no-progress
+# Install Az PowerShell module (latest)
+try {
+    Log "Installing Az module"
+    Install-Module -Name Az -Force -AllowClobber -Scope AllUsers -Confirm:$false -ErrorAction Stop
+    Log "Az module installed successfully"
+} catch {
+    Log "Failed to install Az module: $_"
+}
 
-# Install Visual Studio Code
-Write-Output "Installing Visual Studio Code..."
-choco install vscode -y --no-progress
-
-# Install Git (includes Git Credential Manager)
-Write-Output "Installing Git..."
-choco install git -y --no-progress
+# Install Git
+try {
+    Log "Installing Git"
+    choco install git -y --no-progress | Out-Null
+    Log "Git installed successfully"
+} catch {
+    Log "Failed to install Git: $_"
+}
 
 # Install GitHub CLI
-Write-Output "Installing GitHub CLI..."
-choco install gh -y --no-progress
-
-# Install Azure CLI
-Write-Output "Installing Azure CLI..."
-choco install azure-cli -y --no-progress
-
-# Install Bicep CLI via Azure CLI
-Write-Output "Installing Bicep CLI..."
 try {
-    az bicep install
+    Log "Installing GitHub CLI"
+    choco install github-cli -y --no-progress | Out-Null
+    Log "GitHub CLI installed successfully"
 } catch {
-    Write-Output "Failed to install Bicep: $_"
+    Log "Failed to install GitHub CLI: $_"
 }
 
-# Write a completion flag
-$completionFlag = "C:\install-tools\logging\install-complete.txt"
-"Install script completed successfully on $(Get-Date)" | Out-File -FilePath $completionFlag -Encoding UTF8 -Force
+# Install Azure CLI
+try {
+    Log "Installing Azure CLI"
+    choco install azure-cli -y --no-progress | Out-Null
+    Log "Azure CLI installed successfully"
+} catch {
+    Log "Failed to install Azure CLI: $_"
+}
 
-Write-Output "Tool installation finished at $(Get-Date)"
-Stop-Transcript
+# Install Bicep CLI via Azure CLI
+try {
+    Log "Installing Bicep CLI"
+    az bicep install --yes | Out-Null
+    Log "Bicep CLI installed successfully"
+} catch {
+    Log "Failed to install Bicep CLI: $_"
+}
+
+# Install Terraform
+try {
+    Log "Installing Terraform"
+    choco install terraform -y --no-progress | Out-Null
+    Log "Terraform installed successfully"
+} catch {
+    Log "Failed to install Terraform: $_"
+}
+
+# Install Visual Studio Code
+try {
+    Log "Installing Visual Studio Code"
+    choco install vscode -y --no-progress | Out-Null
+    Log "Visual Studio Code installed successfully"
+} catch {
+    Log "Failed to install Visual Studio Code: $_"
+}
+
+Log "********** install-tools.ps1 completed **********"
