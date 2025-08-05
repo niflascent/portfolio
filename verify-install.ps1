@@ -85,4 +85,19 @@ try {
     Log "Failed to load Az PowerShell modules."
 }
 
+# Check AzureAD module
+if (Get-Module -ListAvailable -Name AzureAD) {
+    Write-Output "AzureAD module is installed."
+} else {
+    Write-Output "AzureAD module is NOT installed."
+}
+
+# Check Microsoft.Graph module
+if (Get-Module -ListAvailable -Name Microsoft.Graph) {
+    Write-Output "Microsoft.Graph module is installed."
+} else {
+    Write-Output "Microsoft.Graph module is NOT installed."
+}
+
 Log "=== Software verification completed ==="
+
