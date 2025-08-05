@@ -86,4 +86,9 @@ try {
     Write-Output "Failed to install Visual Studio Code: $_"
 }
 
+# Write a completion flag
+$completionFlag = "C:\install-tools\logging\install-complete.txt"
+"Install script completed successfully on $(Get-Date)" | Out-File -FilePath $completionFlag -Encoding UTF8 -Force
+
 Stop-Transcript
+
