@@ -3,92 +3,77 @@
 # Idempotent Installer
 # Run as Administrator
 
-# Create logging directory
-$logPath = "C:\install-tools\logging"
-if (-not (Test-Path $logPath)) {
-    New-Item -Path $logPath -ItemType Directory -Force | Out-Null
+# Ensure logging directory exists
+$logDir = "C:\install-tools\logging"
+if (!(Test-Path $logDir)) {
+    New-Item -Path $logDir -ItemType Directory -Force
 }
+$logFile = Join-Path $logDir "install-tools.log"
 
-# Start logging
-$logFile = Join-Path $logPath "install-tools.log"
 Start-Transcript -Path $logFile -Append
 
-# Trust PSGallery repository to avoid prompt
+Write-Output "Starting tool installation at $(Get-Date)"
+
+# Ensure TLS 1.2
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+# Install NuGet provider silently
+Write-Output "Ensuring NuGet provider..."
+$nugetProvider = Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue
+if (-not $nugetProvider) {
+    Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope CurrentUser
+}
+
+# Install Az PowerShell modules
+Write-Output "Installing Az PowerShell modules..."
 try {
-    Set-PSRepository -Name 'PSGallery' -InstallationPolicy Trusted -ErrorAction SilentlyContinue
+    Install-Module -Name Az -AllowClobber -Force -Scope CurrentUser
 } catch {
-    Write-Output "Failed to set PSGallery repository as trusted. Continuing..."
+    Write-Output "Az module install failed: $_"
 }
 
-# Ensure NuGet provider is installed silently
-if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
-    Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Confirm:$false
+# Install Chocolatey if missing
+if (-not (Get-Command choco.exe -ErrorAction SilentlyContinue)) {
+    Write-Output "Installing Chocolatey..."
+    Set-ExecutionPolicy Bypass -Scope Process -Force
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+    Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
 }
 
-# Import NuGet provider
-Import-PackageProvider -Name NuGet -Force
-
-# Helper function to install modules silently
-function Install-ModuleSafe {
-    param (
-        [string]$ModuleName
-    )
-    if (-not (Get-Module -ListAvailable -Name $ModuleName)) {
-        Write-Output "Installing module: $ModuleName"
-        try {
-            Install-Module -Name $ModuleName -Force -AllowClobber -Scope AllUsers -Confirm:$false
-            Write-Output "Installed module: $ModuleName"
-        } catch {
-            Write-Output "Failed to install module: $ModuleName. $_"
-        }
-    } else {
-        Write-Output "Module already installed: $ModuleName"
-    }
-}
-
-# Install required PowerShell modules
-$modules = @("Az.Accounts", "Az.Resources", "AzViz")
-
-foreach ($mod in $modules) {
-    Install-ModuleSafe -ModuleName $mod
-}
+# Ensure Chocolatey is available in this session
+$env:Path += ";$($env:ALLUSERSPROFILE)\chocolatey\bin"
 
 # Install Terraform
-try {
-    if (-not (Get-Command terraform -ErrorAction SilentlyContinue)) {
-        Write-Output "Installing Terraform"
-        Invoke-WebRequest -Uri "https://releases.hashicorp.com/terraform/1.9.2/terraform_1.9.2_windows_amd64.zip" -OutFile "$env:TEMP\terraform.zip"
-        Expand-Archive -Path "$env:TEMP\terraform.zip" -DestinationPath "C:\terraform" -Force
-        $envPath = [Environment]::GetEnvironmentVariable("Path", [EnvironmentVariableTarget]::Machine)
-        if ($envPath -notlike "*C:\terraform*") {
-            [Environment]::SetEnvironmentVariable("Path", $envPath + ";C:\terraform", [EnvironmentVariableTarget]::Machine)
-            Write-Output "Added Terraform to system PATH"
-        }
-    } else {
-        Write-Output "Terraform already installed"
-    }
-} catch {
-    Write-Output "Failed to install Terraform: $_"
-}
+Write-Output "Installing Terraform..."
+choco install terraform -y --no-progress
 
-# Install Visual Studio Code (if not installed)
+# Install Visual Studio Code
+Write-Output "Installing Visual Studio Code..."
+choco install vscode -y --no-progress
+
+# Install Git (includes Git Credential Manager)
+Write-Output "Installing Git..."
+choco install git -y --no-progress
+
+# Install GitHub CLI
+Write-Output "Installing GitHub CLI..."
+choco install gh -y --no-progress
+
+# Install Azure CLI
+Write-Output "Installing Azure CLI..."
+choco install azure-cli -y --no-progress
+
+# Install Bicep CLI via Azure CLI
+Write-Output "Installing Bicep CLI..."
 try {
-    if (-not (Get-Command code -ErrorAction SilentlyContinue)) {
-        Write-Output "Installing Visual Studio Code"
-        $vscodeInstaller = "$env:TEMP\VSCodeSetup.exe"
-        Invoke-WebRequest -Uri "https://update.code.visualstudio.com/latest/win32-x64-user/stable" -OutFile $vscodeInstaller
-        Start-Process -FilePath $vscodeInstaller -ArgumentList "/silent","/mergetasks=!runcode" -Wait
-        Remove-Item $vscodeInstaller -Force
-    } else {
-        Write-Output "Visual Studio Code already installed"
-    }
+    az bicep install
 } catch {
-    Write-Output "Failed to install Visual Studio Code: $_"
+    Write-Output "Failed to install Bicep: $_"
 }
 
 # Write a completion flag
 $completionFlag = "C:\install-tools\logging\install-complete.txt"
 "Install script completed successfully on $(Get-Date)" | Out-File -FilePath $completionFlag -Encoding UTF8 -Force
 
+Write-Output "Tool installation finished at $(Get-Date)"
 Stop-Transcript
-
