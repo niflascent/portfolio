@@ -72,6 +72,9 @@ choco install vscode -y
 # GraphWiz
 choco install graphviz -y
 
+# Bicep
+choco install bicep -y
+
 # Install PowerShell modules (idempotent)
 $modules = @(
     @{ Name = "Az"; MinimumVersion = "6.4.0" },
@@ -88,14 +91,6 @@ foreach ($mod in $modules) {
     } else {
         Write-Output "PowerShell module $($mod.Name) already installed."
     }
-}
-
-# Bicep CLI installation using Azure CLI (idempotent)
-if (-not (Get-Command bicep -ErrorAction SilentlyContinue)) {
-    Write-Output "Installing Bicep CLI via Azure CLI..."
-    az bicep install
-} else {
-    Write-Output "Bicep CLI already installed."
 }
 
 # Final output of versions installed
@@ -160,6 +155,7 @@ Write-Output "===== End of Version Information ====="
 Write-Output "===== install-tools script completed ====="
 
 Stop-Transcript
+
 
 
 
