@@ -69,6 +69,12 @@ choco install terraform -y
 # Visual Studio Code
 choco install vscode -y
 
+# GraphWiz
+choco install graphviz -y
+
+# Inkscape (SVG Viewer)
+choco install inkscape -y
+
 # Install PowerShell modules (idempotent)
 $modules = @(
     @{ Name = "Az"; MinimumVersion = "6.4.0" },
@@ -157,5 +163,6 @@ Write-Output "===== End of Version Information ====="
 Write-Output "===== install-tools script completed ====="
 
 Stop-Transcript
+
 
 
