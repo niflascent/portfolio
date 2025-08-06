@@ -64,10 +64,10 @@ if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
 }
 
 # Terraform
-choco install terraform
+choco install terraform -y
 
 # Visual Studio Code
-choco install vscode
+choco install vscode -y
 
 # Bicep CLI installation using Azure CLI (idempotent)
 if (-not (Get-Command bicep -ErrorAction SilentlyContinue)) {
@@ -157,3 +157,4 @@ Write-Output "===== End of Version Information ====="
 Write-Output "===== install-tools script completed ====="
 
 Stop-Transcript
+
